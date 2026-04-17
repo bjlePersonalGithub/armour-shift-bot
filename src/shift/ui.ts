@@ -1,6 +1,6 @@
-import { SHIFTS } from './config.js';
+import { SHIFTS } from '../config.js';
 import type { ShiftState } from './store.js';
-import { discordTime } from './util.js';
+import { discordTime } from '../util/time.js';
 
 type SlotKey = Exclude<keyof ShiftState, 'reserve'>;
 

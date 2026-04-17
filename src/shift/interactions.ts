@@ -5,7 +5,7 @@ import {
 import { emptyState, getState, setState } from './store.js';
 import type { ShiftState } from './store.js';
 import { buildComponents, buildEmbed } from './ui.js';
-import { isSaturdayIn } from './util.js';
+import { isSaturdayIn } from '../util/time.js';
 
 type SlotKey = Exclude<keyof ShiftState, 'reserve'>;
 
