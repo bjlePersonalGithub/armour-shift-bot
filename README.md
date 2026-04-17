@@ -2,20 +2,21 @@
 
 A Discord bot that posts a shift sign-up panel. Users click buttons to claim officer slots, toggle reserve status, or take a Tank Squire role. Assignments persist across restarts.
 
-Runs over **HTTP interactions** (no Gateway connection) using TypeScript + Express.
+Runs over **HTTP interactions** (no Gateway connection) using TypeScript + Express. Deployable to **AWS Lambda** with DynamoDB-backed state, or runnable locally behind a tunnel.
 
 ## Features
 
 - `/shift` command posts an embed with three shifts (Main + Secondary officer slots), a Tank Squire slot, and a Reserve list.
 - Click a slot to claim it. Click your own slot to unassign. Occupied slots can't be stolen.
 - Reserve is unlimited and can be held alongside a shift slot.
-- State is persisted to `data/shifts.json`, keyed by Discord message ID — each `/shift` post is independent.
+- State is persisted to **DynamoDB**, keyed by Discord message ID — each `/shift` post is independent.
 
 ## Prerequisites
 
-- Node.js 18+ (uses native `fetch`)
+- Node.js 20+ (uses native `fetch`)
 - A Discord Application with a bot user — https://discord.com/developers/applications
-- A way to expose `localhost` publicly (ngrok, cloudflared, a VPS, etc.)
+- For Lambda deploy: an AWS account with the AWS CLI configured
+- For local dev: a way to expose `localhost` publicly (ngrok, cloudflared, a VPS, etc.)
 
 ## Setup
 
@@ -37,7 +38,11 @@ Copy `.env.example` to `.env` and fill in:
 | `DISCORD_PUBLIC_KEY` | Developer Portal → General Information → Public Key |
 | `DISCORD_BOT_TOKEN` | Developer Portal → Bot → Token (click Reset to reveal) |
 | `DISCORD_GUILD_ID` | Optional. Right-click your server → Copy Server ID (Developer Mode must be on). Set this for instant command registration in one guild. Leave blank to register globally (takes up to 1 hour to propagate). |
+| `DYNAMO_TABLE` | Name of the DynamoDB table (e.g. `shift-bot-state`). Required in both local and Lambda environments. |
+| `AWS_REGION` | AWS region the table lives in (local dev only — Lambda sets this automatically). e.g. `us-east-2` |
 | `PORT` | Local HTTP port, defaults to 3000 |
+
+For local dev, AWS credentials are read from your `~/.aws/credentials` / environment (the same place the AWS CLI uses).
 
 ### 3. Invite the bot
 
@@ -54,9 +59,11 @@ Open the generated URL and add the bot to your server.
 npm run register
 ```
 
-This `PUT`s the `/shift` command to Discord. Re-run it whenever you change command definitions in [src/register.ts](src/register.ts).
+This `PUT`s the `/shift` command to Discord. Re-run it whenever you change command definitions in [src/register.ts](src/register.ts). Registration is per-application, not per-endpoint — you only need to do it once (or when commands change).
 
-### 5. Start the server
+## Running locally
+
+### Start the server
 
 ```bash
 npm start
@@ -64,7 +71,7 @@ npm start
 
 You should see `listening on :3000`.
 
-### 6. Expose the endpoint
+### Expose the endpoint
 
 In another terminal:
 
@@ -74,7 +81,7 @@ ngrok http 3000
 
 Copy the `https://...ngrok-free.dev` URL.
 
-### 7. Point Discord at it
+### Point Discord at it
 
 In the Developer Portal → General Information → **Interactions Endpoint URL**, paste:
 
@@ -86,9 +93,88 @@ Click **Save Changes**. Discord will send a `PING` to verify — save succeeds o
 
 > ngrok free URLs change on every restart. Update the portal URL each time.
 
-### 8. Try it
+### Try it
 
 In your server, run `/shift`. The embed appears with clickable buttons.
+
+## Deploying to AWS Lambda
+
+The bot bundles into a single zip file for manual upload to Lambda behind a Function URL. DynamoDB stores per-message state.
+
+### 1. Create the DynamoDB table
+
+AWS Console → DynamoDB → **Create table**:
+
+- **Table name:** `shift-bot-state`
+- **Partition key:** `messageId` (String)
+- **Capacity mode:** On-demand (pay-per-request)
+
+### 2. Build the zip
+
+```bash
+npm run build
+```
+
+Produces `dist/lambda.zip` (~500 KB — everything bundled with esbuild).
+
+### 3. Create the Lambda function
+
+AWS Console → Lambda → **Create function**:
+
+- **Function name:** `shift-bot`
+- **Runtime:** Node.js 20.x
+- **Architecture:** x86_64
+- **Execution role:** Create a new role with basic Lambda permissions
+
+After creation:
+
+- **Code** tab → **Upload from** → **.zip file** → select `dist/lambda.zip`
+- **Runtime settings** → **Edit** → set **Handler** to `lambda.handler`
+- **Configuration** → **General configuration** → Memory `512 MB`, Timeout `10 sec`
+
+### 4. Grant DynamoDB access
+
+**Configuration** → **Permissions** → click the execution role → IAM opens →
+**Add permissions** → **Attach policies** → `AmazonDynamoDBFullAccess` (or a scoped inline policy for just `shift-bot-state`).
+
+### 5. Set environment variables
+
+**Configuration** → **Environment variables** → **Edit**:
+
+| Key | Value |
+| --- | --- |
+| `DISCORD_PUBLIC_KEY` | From the Developer Portal |
+| `DISCORD_APP_ID` | From the Developer Portal |
+| `DISCORD_BOT_TOKEN` | From the Developer Portal |
+| `DYNAMO_TABLE` | `shift-bot-state` |
+
+### 6. Create a Function URL
+
+**Configuration** → **Function URL** → **Create function URL**:
+
+- **Auth type:** `NONE` (Discord authenticates via signature)
+- **Invoke mode:** `BUFFERED`
+- CORS: leave off
+
+Copy the generated URL (`https://<id>.lambda-url.<region>.on.aws/`).
+
+### 7. Point Discord at it
+
+Developer Portal → General Information → **Interactions Endpoint URL**:
+
+```
+https://<id>.lambda-url.<region>.on.aws/interactions
+```
+
+Save. Discord sends a `PING` — a successful save means signature verification works.
+
+### Updating the deployed function
+
+```bash
+npm run build
+```
+
+Then in the Lambda Console: **Code** tab → **Upload from** → **.zip file** → `dist/lambda.zip`. Changes go live within a few seconds.
 
 ## Scripts
 
@@ -96,38 +182,51 @@ In your server, run `/shift`. The embed appears with clickable buttons.
 | --- | --- |
 | `npm start` | Runs [src/index.ts](src/index.ts) via tsx |
 | `npm run register` | Registers/updates the `/shift` command with Discord |
+| `npm run build` | Bundles `src/lambda.ts` with esbuild and zips it to `dist/lambda.zip` |
 | `npm run typecheck` | `tsc --noEmit` |
 
 ## Project layout
 
 ```
 src/
-├── index.ts              — HTTP entry
+├── index.ts              — HTTP entry, exports `app`
+├── lambda.ts             — Lambda handler (wraps app with serverless-http)
 ├── register.ts           — slash-command registration script
 ├── config.ts             — env + shift definitions
 ├── shift/
 │   ├── interactions.ts   — handleCommand / handleButton
 │   ├── ui.ts             — buildEmbed / buildComponents
-│   └── store.ts          — per-message state persistence
+│   └── store.ts          — DynamoDB-backed per-message state
 └── util/
     └── time.ts           — discordTime, isSaturdayIn, etc.
+
+scripts/
+└── build.mjs             — esbuild bundler + zip
 ```
 
 ## How interactions flow
 
-1. Discord sends a signed POST to `/interactions`.
+1. Discord sends a signed POST to `/interactions` (either your ngrok host or the Lambda Function URL).
 2. [src/index.ts](src/index.ts) verifies the Ed25519 signature with `discord-interactions`.
 3. Based on `body.type`:
    - `PING` (1): respond with `PONG`. Used by Discord to verify the endpoint.
-   - `APPLICATION_COMMAND` (2): delegate to [handleCommand](src/interactions.ts).
-   - `MESSAGE_COMPONENT` (3): delegate to [handleButton](src/interactions.ts).
-4. Button handlers mutate state, persist to disk, and return an `UPDATE_MESSAGE` response that replaces the original embed in place.
+   - `APPLICATION_COMMAND` (2): delegate to [handleCommand](src/shift/interactions.ts).
+   - `MESSAGE_COMPONENT` (3): delegate to [handleButton](src/shift/interactions.ts).
+4. Button handlers read state from DynamoDB, mutate it, write it back, and return an `UPDATE_MESSAGE` response that replaces the original embed in place.
 
-Responses must be returned within **3 seconds** or Discord shows "The application did not respond".
+Responses must be returned within **3 seconds** or Discord shows "The application did not respond". On Lambda, cold starts typically run 400–800 ms for this bundle — well inside the budget.
 
 ## State model
 
-State is a flat object keyed by message ID. Each record:
+State is stored in DynamoDB, one item per Discord message:
+
+```
+Table: shift-bot-state
+Partition key: messageId (String)
+Attribute:     state     (Map / document)
+```
+
+The `state` document matches:
 
 ```ts
 interface ShiftState {
@@ -142,7 +241,7 @@ interface ShiftState {
 }
 ```
 
-Each `/shift` post has its own entry, so you can run multiple concurrently (e.g. different ops on different days).
+Each `/shift` post has its own item, so you can run multiple concurrently (e.g. different ops on different days).
 
 ## Button IDs
 
@@ -156,25 +255,18 @@ Each `/shift` post has its own entry, so you can run multiple concurrently (e.g.
 
 ## Customizing shifts
 
-Edit [src/config.ts](src/config.ts) to change labels or times. The button layout in [src/ui.ts](src/ui.ts) and slot keys in [src/store.ts](src/store.ts) assume exactly three shifts — adding or removing shifts requires updating both.
+Edit [src/config.ts](src/config.ts) to change labels or times. The button layout in [src/shift/ui.ts](src/shift/ui.ts) and slot keys in [src/shift/store.ts](src/shift/store.ts) assume exactly three shifts — adding or removing shifts requires updating both.
 
 ## Troubleshooting
 
-**"The application did not respond"** — Discord couldn't reach your endpoint within 3s. Check: server is running, ngrok is active, portal URL matches current ngrok host, no crashes in server logs.
+**"The application did not respond"** — Discord couldn't reach your endpoint within 3s. Check: server is running (or Lambda isn't erroring), the Interactions Endpoint URL matches the current host, no crashes in logs. For Lambda, check CloudWatch logs (Lambda Console → Monitor → View CloudWatch logs).
 
 **`Missing Access` (50001) when registering** — Bot wasn't invited with the `applications.commands` scope, or `DISCORD_GUILD_ID` points to a guild the bot isn't in. Re-invite with both `bot` and `applications.commands` scopes.
 
-**Signature verification fails** — `DISCORD_PUBLIC_KEY` in `.env` doesn't match the one in the Developer Portal. Copy it again.
+**Signature verification fails** — `DISCORD_PUBLIC_KEY` env var doesn't match the one in the Developer Portal. Copy it again (no whitespace, no quotes).
+
+**`ResourceNotFoundException` on button clicks** — the Lambda is in a different region than the DynamoDB table, or `DYNAMO_TABLE` env var doesn't match the table name. Both must match.
+
+**`AccessDeniedException` from DynamoDB** — the Lambda execution role doesn't have DynamoDB permissions. Attach `AmazonDynamoDBFullAccess` (or a scoped policy) to the role.
 
 **Platform-specific esbuild error** — `node_modules` was installed on a different OS than it's running on. Delete `node_modules` and `package-lock.json`, then `npm install` in the environment where you'll run it.
-
-**State appears to reset after restart** — check `data/shifts.json` exists and is valid JSON. State is keyed by message ID, so if that file is deleted, old `/shift` posts lose their state (the embed in Discord still shows old assignments until someone clicks, which then overwrites with a fresh empty state).
-
-## Production notes
-
-This repo is built for local dev. For production:
-
-- Run behind a real reverse proxy (nginx, Caddy) with a stable TLS cert instead of ngrok.
-- Use a process manager (systemd, pm2) to keep the server running.
-- Back up `data/shifts.json` if assignments matter.
-- Replace the flat JSON store with a database if you expect concurrent writes at any volume.
