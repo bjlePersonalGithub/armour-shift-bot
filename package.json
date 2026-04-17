@@ -7,7 +7,7 @@
     "start": "tsx src/index.ts",
     "register": "tsx src/register.ts",
     "typecheck": "tsc --noEmit",
-    "build": "node scripts/build.mjs"
+    "deploy": "node scripts/deploy.mjs"
   },
   "keywords": [],
   "author": "",

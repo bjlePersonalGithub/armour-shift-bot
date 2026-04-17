@@ -15,7 +15,7 @@ Runs over **HTTP interactions** (no Gateway connection) using TypeScript + Expre
 
 - Node.js 20+ (uses native `fetch`)
 - A Discord Application with a bot user — https://discord.com/developers/applications
-- For Lambda deploy: an AWS account with the AWS CLI configured
+- For Lambda deploy: an AWS account with the AWS CLI configured, and Docker Desktop (the app is shipped as a container image)
 - For local dev: a way to expose `localhost` publicly (ngrok, cloudflared, a VPS, etc.)
 - For Docker-based local dev (recommended): Docker Desktop with Compose v2
 
@@ -40,11 +40,13 @@ Copy `.env.example` to `.env` and fill in:
 | `DISCORD_BOT_TOKEN` | Developer Portal → Bot → Token (click Reset to reveal) |
 | `DISCORD_GUILD_ID` | Optional. Right-click your server → Copy Server ID (Developer Mode must be on). Set this for instant command registration in one guild. Leave blank to register globally (takes up to 1 hour to propagate). |
 | `DYNAMO_TABLE` | Name of the DynamoDB table (e.g. `shift-bot-state` or `shift-state` for Docker). Required in both local and Lambda environments. |
-| `AWS_REGION` | AWS region the table lives in. Set to `us-east-1` for Docker; Lambda sets this automatically. |
+| `AWS_REGION` | AWS region the table lives in. Set to `us-east-1` for Docker; Lambda sets this automatically at runtime. Also read by `scripts/deploy.mjs` to target ECR and Lambda. |
 | `DYNAMO_ENDPOINT` | **Local dev only.** Set to `http://localhost:8000` when running `npm start` against a dockerized DynamoDB Local. Leave blank in production — the SDK will talk to real AWS. Compose sets this automatically for the `app` container. |
 | `OFFICER_ROLE_ID` | Optional. Discord role ID allowed to click shift buttons. Defaults to the hardcoded value in [src/config.ts](src/config.ts). |
 | `SHIFT_TIMEZONE` | Optional. IANA timezone for shift labels. Defaults to `America/New_York`. |
 | `PORT` | Local HTTP port, defaults to 3000 |
+| `ECR_REPO` | Deploy-only. Name of the ECR repository that holds the Lambda image. |
+| `LAMBDA_FUNCTION` | Deploy-only. Name of the Lambda function to update. |
 
 For local dev against **real AWS DynamoDB**, credentials are read from your `~/.aws/credentials` / environment (the same place the AWS CLI uses). For Docker-based local dev, Compose injects dummy credentials that DynamoDB Local accepts.
 
@@ -131,7 +133,9 @@ In your server, run `/shift`. The embed appears with clickable buttons.
 
 ## Deploying to AWS Lambda
 
-The bot bundles into a single zip file for manual upload to Lambda behind a Function URL. DynamoDB stores per-message state.
+The bot deploys as a **container image** to Lambda, stored in Amazon ECR. The production [Dockerfile](Dockerfile) uses the AWS Lambda Node.js 24 base image; [scripts/deploy.mjs](scripts/deploy.mjs) builds, pushes to ECR, and updates the Lambda function in one command.
+
+Throughout this section, placeholders like `<account-id>`, `<region>`, `<ecr-repo>`, `<function-name>`, and `<exec-role-arn>` should be substituted with your own values. The commands assume you've set them in `.env` (`AWS_REGION`, `ECR_REPO`, `LAMBDA_FUNCTION`).
 
 ### 1. Create the DynamoDB table
 
@@ -141,56 +145,62 @@ AWS Console → DynamoDB → **Create table**:
 - **Partition key:** `messageId` (String)
 - **Capacity mode:** On-demand (pay-per-request)
 
-### 2. Build the zip
+### 2. Create the ECR repository (one-time)
 
 ```bash
-npm run build
+aws ecr create-repository --repository-name <ecr-repo> --region <region>
 ```
 
-Produces `dist/lambda.zip` (~500 KB — everything bundled with esbuild).
+Note the `repositoryUri` in the response — it has the form `<account-id>.dkr.ecr.<region>.amazonaws.com/<ecr-repo>`.
 
-### 3. Create the Lambda function
+### 3. Push the initial image (one-time bootstrap)
 
-AWS Console → Lambda → **Create function**:
+`scripts/deploy.mjs` assumes the Lambda function already exists, so the first image goes up manually. From the project root (PowerShell-friendly; single line each):
 
-- **Function name:** `shift-bot`
-- **Runtime:** Node.js 20.x
-- **Architecture:** x86_64
-- **Execution role:** Create a new role with basic Lambda permissions
+```bash
+aws ecr get-login-password --region <region> | docker login --username AWS --password-stdin <account-id>.dkr.ecr.<region>.amazonaws.com
+docker build --platform linux/amd64 -t <account-id>.dkr.ecr.<region>.amazonaws.com/<ecr-repo>:latest .
+docker push <account-id>.dkr.ecr.<region>.amazonaws.com/<ecr-repo>:latest
+```
 
-After creation:
+### 4. Create the Lambda function (one-time)
 
-- **Code** tab → **Upload from** → **.zip file** → select `dist/lambda.zip`
-- **Runtime settings** → **Edit** → set **Handler** to `lambda.handler`
-- **Configuration** → **General configuration** → Memory `512 MB`, Timeout `10 sec`
+You need an execution role with basic Lambda permissions plus DynamoDB access. If you have an existing Lambda in any region, you can reuse its role — IAM roles are global. Fetch the ARN with:
 
-### 4. Grant DynamoDB access
+```bash
+aws lambda get-function-configuration --function-name <existing-function> --region <region> --query Role --output text
+```
 
-**Configuration** → **Permissions** → click the execution role → IAM opens →
-**Add permissions** → **Attach policies** → `AmazonDynamoDBFullAccess` (or a scoped inline policy for just `shift-bot-state`).
+Then create the new container Lambda (substitute your values; one line):
 
-### 5. Set environment variables
+```bash
+aws lambda create-function --function-name <function-name> --package-type Image --code ImageUri=<account-id>.dkr.ecr.<region>.amazonaws.com/<ecr-repo>:latest --role <exec-role-arn> --architectures x86_64 --timeout 10 --memory-size 512 --region <region> --environment "Variables={DISCORD_PUBLIC_KEY=...,DISCORD_APP_ID=...,DISCORD_BOT_TOKEN=...,DYNAMO_TABLE=shift-bot-state,OFFICER_ROLE_ID=...,SHIFT_TIMEZONE=America/New_York}"
+```
 
-**Configuration** → **Environment variables** → **Edit**:
+If the role doesn't already have DynamoDB permissions, attach `AmazonDynamoDBFullAccess` (or a scoped policy for just your table) via IAM Console or:
 
-| Key | Value |
-| --- | --- |
-| `DISCORD_PUBLIC_KEY` | From the Developer Portal |
-| `DISCORD_APP_ID` | From the Developer Portal |
-| `DISCORD_BOT_TOKEN` | From the Developer Portal |
-| `DYNAMO_TABLE` | `shift-bot-state` |
+```bash
+aws iam attach-role-policy --role-name <role-name> --policy-arn arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+```
 
-### 6. Create a Function URL
+### 5. Create a Function URL
 
-**Configuration** → **Function URL** → **Create function URL**:
+Console → Lambda → your function → **Configuration** → **Function URL** → **Create function URL**:
 
 - **Auth type:** `NONE` (Discord authenticates via signature)
 - **Invoke mode:** `BUFFERED`
 - CORS: leave off
 
+Or via CLI:
+
+```bash
+aws lambda create-function-url-config --function-name <function-name> --auth-type NONE --region <region>
+aws lambda add-permission --function-name <function-name> --statement-id FunctionURLAllowPublicAccess --action lambda:InvokeFunctionUrl --principal "*" --function-url-auth-type NONE --region <region>
+```
+
 Copy the generated URL (`https://<id>.lambda-url.<region>.on.aws/`).
 
-### 7. Point Discord at it
+### 6. Point Discord at it
 
 Developer Portal → General Information → **Interactions Endpoint URL**:
 
@@ -202,11 +212,20 @@ Save. Discord sends a `PING` — a successful save means signature verification 
 
 ### Updating the deployed function
 
+Every subsequent deploy is one command:
+
 ```bash
-npm run build
+npm run deploy
 ```
 
-Then in the Lambda Console: **Code** tab → **Upload from** → **.zip file** → `dist/lambda.zip`. Changes go live within a few seconds.
+[scripts/deploy.mjs](scripts/deploy.mjs) reads `AWS_REGION`, `ECR_REPO`, and `LAMBDA_FUNCTION` from `.env`, then:
+
+1. Logs into ECR.
+2. Builds the image with a timestamp tag and `latest`.
+3. Pushes both tags.
+4. Calls `aws lambda update-function-code --image-uri …` with the timestamp tag and waits for the update to finish.
+
+Changes go live within a few seconds of the wait returning.
 
 ## Scripts
 
@@ -214,7 +233,7 @@ Then in the Lambda Console: **Code** tab → **Upload from** → **.zip file** �
 | --- | --- |
 | `npm start` | Runs [src/index.ts](src/index.ts) via tsx |
 | `npm run register` | Registers/updates the `/shift` command with Discord |
-| `npm run build` | Bundles `src/lambda.ts` with esbuild and zips it to `dist/lambda.zip` |
+| `npm run deploy` | Builds the production container image, pushes it to ECR, and updates the Lambda function |
 | `npm run typecheck` | `tsc --noEmit` |
 
 ## Project layout
@@ -233,9 +252,10 @@ src/
     └── time.ts           — discordTime, isSaturdayIn, etc.
 
 scripts/
-└── build.mjs             — esbuild bundler + zip
+└── deploy.mjs            — build image, push to ECR, update Lambda
 
-Dockerfile                — node:24-alpine runtime image for the bot
+Dockerfile                — production Lambda container (multi-stage esbuild + lambda/nodejs:24 base)
+Dockerfile.dev            — node:24-alpine runtime image for local docker-compose
 docker-compose.yml        — bot + DynamoDB Local + table bootstrap
 ```
 

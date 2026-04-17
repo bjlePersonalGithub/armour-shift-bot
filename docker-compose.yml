@@ -30,7 +30,9 @@ services:
           2>/dev/null || echo "table already exists"
 
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
     depends_on:
       dynamodb-init:
         condition: service_completed_successfully
