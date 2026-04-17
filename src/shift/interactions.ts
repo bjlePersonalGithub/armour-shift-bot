@@ -6,6 +6,7 @@ import { emptyState, getState, setState } from './store.js';
 import type { ShiftState } from './store.js';
 import { buildComponents, buildEmbed, buildPlainText } from './ui.js';
 import { isSaturdayIn } from '../util/time.js';
+import { OFFICER_ROLE_ID } from '../config.js';
 
 type SlotKey = Exclude<keyof ShiftState, 'reserve'>;
 
@@ -49,7 +50,15 @@ export function handleCommand(): Record<string, unknown> {
       'Shift sign-ups cannot be started on Saturday. Please run this command on a day before the upcoming Saturday.',
     );
   }
-  return rerender(emptyState(), false);
+  return {
+    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+    data: {
+      content: `<@&${OFFICER_ROLE_ID}>`,
+      embeds: [buildEmbed(emptyState())],
+      components: buildComponents(),
+      allowed_mentions: { roles: [OFFICER_ROLE_ID] },
+    },
+  };
 }
 
 interface ButtonInteraction {
