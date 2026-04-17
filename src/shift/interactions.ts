@@ -4,7 +4,7 @@ import {
 } from 'discord-interactions';
 import { emptyState, getState, setState } from './store.js';
 import type { ShiftState } from './store.js';
-import { buildComponents, buildEmbed } from './ui.js';
+import { buildComponents, buildEmbed, buildPlainText } from './ui.js';
 import { isSaturdayIn } from '../util/time.js';
 
 type SlotKey = Exclude<keyof ShiftState, 'reserve'>;
@@ -73,6 +73,12 @@ export function handleButton(body: ButtonInteraction): Record<string, unknown> {
     else state.reserve.push(userId);
     setState(messageId, state);
     return rerender(state, true);
+  }
+
+  if (customId === 'fin') {
+    return ephemeral(
+      `Copy the text below and paste it wherever you want to share the sign-up:\n\`\`\`\n${buildPlainText(state)}\n\`\`\``,
+    );
   }
 
   const slot = SLOT_MAP[customId];

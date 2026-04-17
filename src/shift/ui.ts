@@ -12,7 +12,7 @@ function slotKey(id: number, slot: 'main' | 'secondary'): SlotKey {
   return `shift${id}_${slot}` as SlotKey;
 }
 
-export function buildEmbed(state: ShiftState): Record<string, unknown> {
+function buildDescription(state: ShiftState, includeFooter: boolean): string {
   const shiftBlocks = SHIFTS.map((s) => {
     const main = state[slotKey(s.id, 'main')];
     const sec = state[slotKey(s.id, 'secondary')];
@@ -29,21 +29,34 @@ export function buildEmbed(state: ShiftState): Record<string, unknown> {
       ? '_\u2014_'
       : state.reserve.map((id) => `<@${id}>`).join(', ');
 
-  const description = [
+  const lines = [
     shiftBlocks,
     '',
     `**Reserve officers:** ${reserveList}`,
     '',
     `**Special Role Tank Squire** = ${mention(state.tank_squire)}`,
-    '',
-    '_Please indicate your attendance with the buttons below._',
-  ].join('\n');
+  ];
+  if (includeFooter) {
+    lines.push('', '_Please indicate your attendance with the buttons below._');
+  }
+  return lines.join('\n');
+}
 
+export function buildEmbed(state: ShiftState): Record<string, unknown> {
   return {
     title: 'Shift Sign-Up',
-    description,
+    description: buildDescription(state, true),
     color: 0x2b2d31,
   };
+}
+
+export function buildPlainText(state: ShiftState): string {
+  return [
+    '# **:Armoured:  THE OFFICERS IN CHARGE OF TANK LINE**',
+    buildDescription(state, false),
+    '',
+    '_Please indicate your attendance with the presented numbers 1\uFE0F\u20E3 2\uFE0F\u20E3 3\uFE0F\u20E3_',
+  ].join('\n');
 }
 
 interface Component {
@@ -68,6 +81,6 @@ export function buildComponents(): Component[] {
     row([btn('s:2:m', 'Shift 2 Main'), btn('s:2:s', 'Shift 2 Secondary')]),
     row([btn('s:3:m', 'Shift 3 Main'), btn('s:3:s', 'Shift 3 Secondary')]),
     row([btn('ts', 'Tank Squire', 3)]),
-    row([btn('r', 'Toggle Reserve', 2)]),
+    row([btn('r', 'Toggle Reserve', 2), btn('fin', 'Finalize Sign-Up', 2)]),
   ];
 }
