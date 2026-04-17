@@ -1,6 +1,6 @@
-import { SHIFTS, SHIFT_TIMEZONE } from './config.js';
-import type { TimeOfDay } from './config.js';
+import { SHIFTS } from './config.js';
 import type { ShiftState } from './store.js';
+import { discordTime } from './util.js';
 
 type SlotKey = Exclude<keyof ShiftState, 'reserve'>;
 
@@ -10,44 +10,6 @@ function mention(id: string | null): string {
 
 function slotKey(id: number, slot: 'main' | 'secondary'): SlotKey {
   return `shift${id}_${slot}` as SlotKey;
-}
-
-function unixTimestampTodayAt(t: TimeOfDay, timeZone: string): number {
-  const now = new Date();
-  const ymd = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now);
-  const hhmm = `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`;
-  const guessMs = Date.parse(`${ymd}T${hhmm}:00Z`);
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    hourCycle: 'h23',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).formatToParts(new Date(guessMs));
-  const part = (type: string): number =>
-    Number(parts.find((p) => p.type === type)!.value);
-  const asIfUtc = Date.UTC(
-    part('year'),
-    part('month') - 1,
-    part('day'),
-    part('hour'),
-    part('minute'),
-    part('second'),
-  );
-  const offsetMs = asIfUtc - guessMs;
-  return Math.floor((guessMs - offsetMs) / 1000);
-}
-
-function discordTime(t: TimeOfDay): string {
-  return `<t:${unixTimestampTodayAt(t, SHIFT_TIMEZONE)}:t>`;
 }
 
 export function buildEmbed(state: ShiftState): Record<string, unknown> {

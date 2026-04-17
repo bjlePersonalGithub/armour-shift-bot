@@ -5,6 +5,7 @@ import {
 import { emptyState, getState, setState } from './store.js';
 import type { ShiftState } from './store.js';
 import { buildComponents, buildEmbed } from './ui.js';
+import { isSaturdayIn } from './util.js';
 
 type SlotKey = Exclude<keyof ShiftState, 'reserve'>;
 
@@ -43,6 +44,11 @@ function rerender(state: ShiftState, asUpdate: boolean): Record<string, unknown>
 }
 
 export function handleCommand(): Record<string, unknown> {
+  if (isSaturdayIn()) {
+    return ephemeral(
+      'Shift sign-ups cannot be started on Saturday. Please run this command on a day before the upcoming Saturday.',
+    );
+  }
   return rerender(emptyState(), false);
 }
 
