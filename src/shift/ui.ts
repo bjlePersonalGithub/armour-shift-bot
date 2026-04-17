@@ -80,7 +80,7 @@ export function buildComponents(): Component[] {
     row([btn('s:1:m', 'Shift 1 Main'), btn('s:1:s', 'Shift 1 Secondary')]),
     row([btn('s:2:m', 'Shift 2 Main'), btn('s:2:s', 'Shift 2 Secondary')]),
     row([btn('s:3:m', 'Shift 3 Main'), btn('s:3:s', 'Shift 3 Secondary')]),
-    row([btn('ts', 'Tank Squire', 3)]),
-    row([btn('r', 'Toggle Reserve', 2), btn('fin', 'Finalize Sign-Up', 2)]),
+    row([btn('r', 'Toggle Reserve', 2), btn('ts', 'Tank Squire', 3)]),
+    row([btn('fin', 'Finalize Sign-Up', 2)]),
   ];
 }
