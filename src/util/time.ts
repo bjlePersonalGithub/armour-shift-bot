@@ -1,5 +1,5 @@
-import { SHIFT_TIMEZONE } from './config.js';
-import type { TimeOfDay } from './config.js';
+import { SHIFT_TIMEZONE } from '../config.js';
+import type { TimeOfDay } from '../config.js';
 
 const WEEKDAY_INDEX: Record<string, number> = {
   Sun: 0,

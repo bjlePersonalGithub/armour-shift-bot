@@ -5,7 +5,7 @@ import {
   InteractionType,
   verifyKey,
 } from 'discord-interactions';
-import { handleButton, handleCommand } from './interactions.js';
+import { handleButton, handleCommand } from './shift/interactions.js';
 
 const PUBLIC_KEY = process.env['DISCORD_PUBLIC_KEY'];
 if (!PUBLIC_KEY) {

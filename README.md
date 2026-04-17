@@ -102,14 +102,15 @@ In your server, run `/shift`. The embed appears with clickable buttons.
 
 ```
 src/
-  index.ts          Express server, verifies signatures, routes interactions
-  interactions.ts   Handlers for /shift and button clicks
-  ui.ts             Embed + button component builders
-  store.ts          JSON persistence (data/shifts.json)
-  config.ts         Shift definitions (times, labels)
-  register.ts       One-off script to register the slash command
-data/
-  shifts.json       Persistent state, created on first interaction
+├── index.ts              — HTTP entry
+├── register.ts           — slash-command registration script
+├── config.ts             — env + shift definitions
+├── shift/
+│   ├── interactions.ts   — handleCommand / handleButton
+│   ├── ui.ts             — buildEmbed / buildComponents
+│   └── store.ts          — per-message state persistence
+└── util/
+    └── time.ts           — discordTime, isSaturdayIn, etc.
 ```
 
 ## How interactions flow
