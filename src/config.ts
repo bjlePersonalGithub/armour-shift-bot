@@ -12,6 +12,9 @@ export interface ShiftDef {
 
 export const SHIFT_TIMEZONE = process.env['SHIFT_TIMEZONE'] ?? 'America/New_York';
 
+export const OFFICER_ROLE_ID =
+  process.env['OFFICER_ROLE_ID'] ?? '1020840585625616424';
+
 export const SHIFTS: readonly ShiftDef[] = [
   {
     id: 1,
