@@ -21,7 +21,10 @@ if (!TABLE_NAME) {
   throw new Error('DYNAMO_TABLE env var is required');
 }
 
-const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
+const endpoint = process.env['DYNAMO_ENDPOINT'];
+const client = DynamoDBDocumentClient.from(
+  new DynamoDBClient(endpoint ? { endpoint } : {}),
+);
 
 export function emptyState(): ShiftState {
   return {
