@@ -17,6 +17,7 @@ Runs over **HTTP interactions** (no Gateway connection) using TypeScript + Expre
 - A Discord Application with a bot user — https://discord.com/developers/applications
 - For Lambda deploy: an AWS account with the AWS CLI configured
 - For local dev: a way to expose `localhost` publicly (ngrok, cloudflared, a VPS, etc.)
+- For Docker-based local dev (recommended): Docker Desktop with Compose v2
 
 ## Setup
 
@@ -38,11 +39,14 @@ Copy `.env.example` to `.env` and fill in:
 | `DISCORD_PUBLIC_KEY` | Developer Portal → General Information → Public Key |
 | `DISCORD_BOT_TOKEN` | Developer Portal → Bot → Token (click Reset to reveal) |
 | `DISCORD_GUILD_ID` | Optional. Right-click your server → Copy Server ID (Developer Mode must be on). Set this for instant command registration in one guild. Leave blank to register globally (takes up to 1 hour to propagate). |
-| `DYNAMO_TABLE` | Name of the DynamoDB table (e.g. `shift-bot-state`). Required in both local and Lambda environments. |
-| `AWS_REGION` | AWS region the table lives in (local dev only — Lambda sets this automatically). e.g. `us-east-2` |
+| `DYNAMO_TABLE` | Name of the DynamoDB table (e.g. `shift-bot-state` or `shift-state` for Docker). Required in both local and Lambda environments. |
+| `AWS_REGION` | AWS region the table lives in. Set to `us-east-1` for Docker; Lambda sets this automatically. |
+| `DYNAMO_ENDPOINT` | **Local dev only.** Set to `http://localhost:8000` when running `npm start` against a dockerized DynamoDB Local. Leave blank in production — the SDK will talk to real AWS. Compose sets this automatically for the `app` container. |
+| `OFFICER_ROLE_ID` | Optional. Discord role ID allowed to click shift buttons. Defaults to the hardcoded value in [src/config.ts](src/config.ts). |
+| `SHIFT_TIMEZONE` | Optional. IANA timezone for shift labels. Defaults to `America/New_York`. |
 | `PORT` | Local HTTP port, defaults to 3000 |
 
-For local dev, AWS credentials are read from your `~/.aws/credentials` / environment (the same place the AWS CLI uses).
+For local dev against **real AWS DynamoDB**, credentials are read from your `~/.aws/credentials` / environment (the same place the AWS CLI uses). For Docker-based local dev, Compose injects dummy credentials that DynamoDB Local accepts.
 
 ### 3. Invite the bot
 
@@ -63,17 +67,45 @@ This `PUT`s the `/shift` command to Discord. Re-run it whenever you change comma
 
 ## Running locally
 
-### Start the server
+There are two paths: **Docker Compose** (recommended — fully self-contained, no AWS account needed) or **npm start** (runs Node on your host, talks to real AWS DynamoDB).
+
+### Option A: Docker Compose (recommended)
+
+Spins up the bot and an in-memory DynamoDB Local in one command. No AWS credentials or real tables required.
+
+```bash
+docker compose up --build
+```
+
+This starts three services:
+
+| Service | Purpose |
+| --- | --- |
+| `dynamodb` | `amazon/dynamodb-local` on port 8000 (in-memory, shared DB) |
+| `dynamodb-init` | One-shot `aws-cli` container that waits for DynamoDB, then creates the `shift-state` table. Exits when done. |
+| `app` | Builds the Dockerfile, runs the bot on port 3000, points the SDK at `http://dynamodb:8000`. |
+
+You should see `listening on :3000` from the `app` service.
+
+`DYNAMO_ENDPOINT`, `AWS_REGION`, and dummy AWS credentials are all injected by [docker-compose.yml](docker-compose.yml) — the only required value in your `.env` is `DISCORD_PUBLIC_KEY`.
+
+**Data is in-memory** — everything resets on `docker compose down` or a `dynamodb` container restart. To persist across restarts, swap `-inMemory` for `-dbPath ./data` in [docker-compose.yml](docker-compose.yml) and add a named volume.
+
+To stop: `Ctrl+C`, then `docker compose down`.
+
+### Option B: `npm start` (host Node, real AWS)
 
 ```bash
 npm start
 ```
 
-You should see `listening on :3000`.
+Requires a real AWS DynamoDB table (see [§1 under Deploying to AWS Lambda](#1-create-the-dynamodb-table)) and AWS credentials on your host. Do **not** set `DYNAMO_ENDPOINT` — leave it blank so the SDK talks to real AWS.
+
+You can also mix: run only DynamoDB Local in Docker (`docker compose up dynamodb dynamodb-init`) and the app on your host with `DYNAMO_ENDPOINT=http://localhost:8000`.
 
 ### Expose the endpoint
 
-In another terminal:
+Either path, in another terminal:
 
 ```bash
 ngrok http 3000
@@ -202,6 +234,9 @@ src/
 
 scripts/
 └── build.mjs             — esbuild bundler + zip
+
+Dockerfile                — node:24-alpine runtime image for the bot
+docker-compose.yml        — bot + DynamoDB Local + table bootstrap
 ```
 
 ## How interactions flow
