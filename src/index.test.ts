@@ -76,16 +76,18 @@ describe('POST /interactions - dispatch', () => {
     expect(mocks.handleCommand).not.toHaveBeenCalled();
   });
 
-  it('routes /shift APPLICATION_COMMAND to handleCommand', async () => {
+  it('routes /shift APPLICATION_COMMAND to handleCommand with channel_id', async () => {
     const stub = { type: 4, data: { content: 'shift-response' } };
     mocks.handleCommand.mockReturnValue(stub);
     const res = await postInteraction({
       type: InteractionType.APPLICATION_COMMAND,
       data: { name: 'shift' },
+      channel_id: '1494671599561998486',
     });
     expect(res.status).toBe(200);
     expect(res.body).toEqual(stub);
     expect(mocks.handleCommand).toHaveBeenCalledOnce();
+    expect(mocks.handleCommand).toHaveBeenCalledWith('1494671599561998486');
   });
 
   it('responds "Unknown command." for any other command name', async () => {

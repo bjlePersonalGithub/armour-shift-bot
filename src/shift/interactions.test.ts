@@ -3,7 +3,7 @@ import {
   InteractionResponseType,
   InteractionResponseFlags,
 } from 'discord-interactions';
-import { OFFICER_ROLE_ID } from '../config.js';
+import { OFFICER_ROLE_ID, SHIFT_CHANNEL_ID } from '../config.js';
 
 interface MockShiftState {
   shift1_main: string | null;
@@ -82,14 +82,14 @@ beforeEach(() => {
 describe('handleCommand', () => {
   it('returns ephemeral block message on Saturday', () => {
     mockedIsSaturday.mockReturnValue(true);
-    const res = handleCommand() as ResponseShape;
+    const res = handleCommand(SHIFT_CHANNEL_ID) as ResponseShape;
     expect(res.type).toBe(InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
     expect(res.data?.flags).toBe(InteractionResponseFlags.EPHEMERAL);
     expect(res.data?.content).toMatch(/Saturday/i);
   });
 
   it('returns embed, components, and role mention on weekdays', () => {
-    const res = handleCommand() as ResponseShape;
+    const res = handleCommand(SHIFT_CHANNEL_ID) as ResponseShape;
     expect(res.type).toBe(InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
     expect(res.data?.content).toBe(`<@&${OFFICER_ROLE_ID}>`);
     expect(res.data?.embeds).toHaveLength(1);
@@ -98,9 +98,22 @@ describe('handleCommand', () => {
   });
 
   it('initial embed has all slots empty', () => {
-    const res = handleCommand() as ResponseShape;
+    const res = handleCommand(SHIFT_CHANNEL_ID) as ResponseShape;
     const embed = res.data?.embeds?.[0] as { description: string };
     expect(embed.description).not.toMatch(/<@\d+>/);
+  });
+
+  it('rejects when invoked in a different channel', () => {
+    const res = handleCommand('9999999999999999999') as ResponseShape;
+    expect(res.type).toBe(InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE);
+    expect(res.data?.flags).toBe(InteractionResponseFlags.EPHEMERAL);
+    expect(res.data?.content).toContain(`<#${SHIFT_CHANNEL_ID}>`);
+  });
+
+  it('rejects when channel_id is missing', () => {
+    const res = handleCommand() as ResponseShape;
+    expect(res.data?.flags).toBe(InteractionResponseFlags.EPHEMERAL);
+    expect(res.data?.content).toContain(`<#${SHIFT_CHANNEL_ID}>`);
   });
 });
 
