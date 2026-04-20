@@ -318,7 +318,7 @@ Responses must be returned within **3 seconds** or Discord shows "The applicatio
 
 ## State model
 
-State is stored in DynamoDB, one item per Discord message:
+State is stored in DynamoDB, one item per Discord message
 
 ```
 Table: shift-bot-state
