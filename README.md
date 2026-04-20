@@ -235,6 +235,51 @@ Changes go live within a few seconds of the wait returning.
 | `npm run register` | Registers/updates the `/shift` command with Discord |
 | `npm run deploy` | Builds the production container image, pushes it to ECR, and updates the Lambda function |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Runs the [vitest](https://vitest.dev) suite once and exits |
+| `npm run test:watch` | Runs vitest in watch mode — re-runs affected tests on file save |
+
+## Testing
+
+The suite uses [vitest](https://vitest.dev) with [supertest](https://github.com/ladjs/supertest) for HTTP assertions. It runs entirely in-process — no Discord, no AWS, no network — so it's safe to run on any branch without credentials.
+
+### Run
+
+```bash
+npm test           # single run, exits with non-zero on failure (use this in CI)
+npm run test:watch # watch mode for local development
+```
+
+Configuration lives in [vitest.config.ts](vitest.config.ts). Test files are picked up from `src/**/*.test.ts`.
+
+### What's covered
+
+- **[src/shift/interactions.test.ts](src/shift/interactions.test.ts)** — `handleCommand` and `handleButton`:
+  - `/shift` is blocked on Saturdays (the day shifts run) and returns the role-mention + embed + button row otherwise.
+  - Officer-role check rejects non-officers and unidentifiable users.
+  - Slot claim / release / conflict semantics for every `custom_id` (`s:1:m` … `s:3:s`, `ts`).
+  - Reserve toggle add/remove, including multiple distinct reserves on the same message.
+  - Finalize button returns the ephemeral plain-text block; unknown `custom_id`s are rejected.
+- **[src/index.test.ts](src/index.test.ts)** — the Express `/interactions` route:
+  - Missing or invalid signature → `401` (and `verifyKey` is not even called when headers are missing).
+  - `PING` → `PONG`.
+  - `APPLICATION_COMMAND` with name `shift` is dispatched to `handleCommand`; any other command name returns `Unknown command.`
+  - `MESSAGE_COMPONENT` is dispatched to `handleButton`.
+  - Unknown interaction types → `400`; handler exceptions → `500`.
+  - `GET /` health check returns `shift-bot ok`.
+
+### How the mocks work
+
+Tests run with no live infrastructure:
+
+- `./shift/store.js` is mocked with an in-memory `Map<messageId, ShiftState>`. This avoids the module's import-time `DYNAMO_TABLE` env-var check and means tests never instantiate a DynamoDB client.
+- `../util/time.js` is mocked so `isSaturdayIn` is deterministic and `discordTime` returns a stable string regardless of when the suite runs.
+- In the route tests, `discord-interactions`'s `verifyKey` is mocked so requests don't need real Ed25519 signatures, and `./shift/interactions.js` is replaced with stubs so the route layer is tested in isolation from business logic. `DISCORD_PUBLIC_KEY`, `DYNAMO_TABLE`, and `AWS_LAMBDA_FUNCTION_NAME` are set inside `vi.hoisted(...)` so they're populated before [src/index.ts](src/index.ts) is imported (which would otherwise throw and skip `app.listen` during tests).
+
+### Adding tests
+
+- Co-locate new tests next to the code under test as `*.test.ts` (the vitest glob picks them up automatically).
+- If a new module reads env at import time, set the value via `vi.hoisted(() => { process.env['X'] = '...'; ... })` before the dynamic `await import(...)`.
+- Prefer mocking at the module boundary (e.g. `vi.mock('./store.js', ...)`) over reaching into internals.
 
 ## Project layout
 
@@ -273,7 +318,7 @@ Responses must be returned within **3 seconds** or Discord shows "The applicatio
 
 ## State model
 
-State is stored in DynamoDB, one item per Discord message:
+State is stored in DynamoDB, one item per Discord message
 
 ```
 Table: shift-bot-state
