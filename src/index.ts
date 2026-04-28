@@ -5,7 +5,14 @@ import {
   InteractionType,
   verifyKey,
 } from 'discord-interactions';
-import { handleButton, handleCommand } from './shift/interactions.js';
+import {
+  handleButton as handleShiftButton,
+  handleCommand as handleShiftCommand,
+} from './shift/interactions.js';
+import {
+  handleButton as handleAdministratumButton,
+  handleCommand as handleAdministratumCommand,
+} from './administratum/interactions.js';
 
 const PUBLIC_KEY = process.env['DISCORD_PUBLIC_KEY'];
 if (!PUBLIC_KEY) {
@@ -50,7 +57,11 @@ app.post(
 
       if (body.type === InteractionType.APPLICATION_COMMAND) {
         if (body.data?.name === 'shift') {
-          res.json(handleCommand(body.channel_id));
+          res.json(handleShiftCommand(body.channel_id));
+          return;
+        }
+        if (body.data?.name === 'administratum') {
+          res.json(handleAdministratumCommand());
           return;
         }
         console.warn('unknown command', { command: body.data?.name });
@@ -62,7 +73,12 @@ app.post(
       }
 
       if (body.type === InteractionType.MESSAGE_COMPONENT) {
-        res.json(await handleButton(body));
+        const customId: string | undefined = body.data?.custom_id;
+        if (customId?.startsWith('a:')) {
+          res.json(await handleAdministratumButton(body));
+          return;
+        }
+        res.json(await handleShiftButton(body));
         return;
       }
 

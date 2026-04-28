@@ -16,6 +16,12 @@ const commands = [
     type: 1,
     dm_permission: false,
   },
+  {
+    name: 'administratum',
+    description: 'Post weekly duties and administrative tasks',
+    type: 1,
+    dm_permission: false,
+  }
 ];
 
 const url = GUILD_ID

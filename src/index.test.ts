@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => {
     verifyKey: vi.fn(),
     handleCommand: vi.fn(),
     handleButton: vi.fn(),
+    handleAdministratumCommand: vi.fn(),
+    handleAdministratumButton: vi.fn(),
   };
 });
 
@@ -25,6 +27,11 @@ vi.mock('discord-interactions', async (importOriginal) => {
 vi.mock('./shift/interactions.js', () => ({
   handleCommand: mocks.handleCommand,
   handleButton: mocks.handleButton,
+}));
+
+vi.mock('./administratum/interactions.js', () => ({
+  handleCommand: mocks.handleAdministratumCommand,
+  handleButton: mocks.handleAdministratumButton,
 }));
 
 const { app } = await import('./index.js');
@@ -43,6 +50,8 @@ beforeEach(() => {
   mocks.verifyKey.mockReset();
   mocks.handleCommand.mockReset();
   mocks.handleButton.mockReset();
+  mocks.handleAdministratumCommand.mockReset();
+  mocks.handleAdministratumButton.mockReset();
   mocks.verifyKey.mockResolvedValue(true);
 });
 
@@ -90,6 +99,19 @@ describe('POST /interactions - dispatch', () => {
     expect(mocks.handleCommand).toHaveBeenCalledWith('1494671599561998486');
   });
 
+  it('routes /administratum APPLICATION_COMMAND to handleAdministratumCommand', async () => {
+    const stub = { type: 4, data: { content: 'admin-response' } };
+    mocks.handleAdministratumCommand.mockReturnValue(stub);
+    const res = await postInteraction({
+      type: InteractionType.APPLICATION_COMMAND,
+      data: { name: 'administratum' },
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(stub);
+    expect(mocks.handleAdministratumCommand).toHaveBeenCalledOnce();
+    expect(mocks.handleCommand).not.toHaveBeenCalled();
+  });
+
   it('responds "Unknown command." for any other command name', async () => {
     const res = await postInteraction({
       type: InteractionType.APPLICATION_COMMAND,
@@ -98,9 +120,10 @@ describe('POST /interactions - dispatch', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.content).toBe('Unknown command.');
     expect(mocks.handleCommand).not.toHaveBeenCalled();
+    expect(mocks.handleAdministratumCommand).not.toHaveBeenCalled();
   });
 
-  it('routes MESSAGE_COMPONENT to handleButton', async () => {
+  it('routes shift MESSAGE_COMPONENT to shift handleButton', async () => {
     const stub = { type: 7, data: { content: 'btn-response' } };
     mocks.handleButton.mockResolvedValue(stub);
     const body = {
@@ -113,6 +136,23 @@ describe('POST /interactions - dispatch', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual(stub);
     expect(mocks.handleButton).toHaveBeenCalledOnce();
+    expect(mocks.handleAdministratumButton).not.toHaveBeenCalled();
+  });
+
+  it('routes administratum MESSAGE_COMPONENT (a: prefix) to administratum handleButton', async () => {
+    const stub = { type: 7, data: { content: 'admin-btn-response' } };
+    mocks.handleAdministratumButton.mockResolvedValue(stub);
+    const body = {
+      type: InteractionType.MESSAGE_COMPONENT,
+      data: { custom_id: 'a:tm' },
+      message: { id: 'm1' },
+      member: { user: { id: 'u1' }, roles: [] },
+    };
+    const res = await postInteraction(body);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(stub);
+    expect(mocks.handleAdministratumButton).toHaveBeenCalledOnce();
+    expect(mocks.handleButton).not.toHaveBeenCalled();
   });
 
   it('returns 400 for unknown interaction types', async () => {

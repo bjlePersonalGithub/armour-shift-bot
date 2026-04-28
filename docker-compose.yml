@@ -38,6 +38,8 @@ services:
         condition: service_completed_successfully
     ports:
       - "3000:3000"
+    volumes:
+      - ./src:/app/src
     environment:
       PORT: 3000
       DYNAMO_TABLE: ${DYNAMO_TABLE:-shift-state}
