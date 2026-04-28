@@ -22,7 +22,7 @@ export const DUTIES: readonly DutyDef[] = [
     key: 'tankmaster',
     customId: 'a:tm',
     label: 'Tankmaster',
-    emote: ':Armoured~1:',
+    emote: 'Armoured',
     category: 'weekly',
     responsibilities: ['Sets MPF queues', 'Runs upgrade patrol for OP'],
   },
@@ -44,7 +44,7 @@ export const DUTIES: readonly DutyDef[] = [
     key: 'manufactorum_master',
     customId: 'a:mm',
     label: 'Manufactorum Master',
-    emote: ':Machine_spirit:',
+    emote: ':Machine\_spirit:',
     category: 'weekly',
     responsibilities: [
       'Cooks Ammo for OP',
