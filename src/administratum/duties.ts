@@ -6,7 +6,7 @@ export type DutyKey =
   | 'facility_team_liason'
   | 'ar_base_overseer';
 
-export type DutyCategory = 'weekly' | 'warlord';
+export type DutyCategory = 'weekly' | 'war_long';
 
 export interface DutyDef {
   key: DutyKey;
@@ -62,14 +62,14 @@ export const DUTIES: readonly DutyDef[] = [
     key: 'facility_team_liason',
     customId: 'a:ftl',
     label: 'Facility Team Liason',
-    category: 'warlord',
+    category: 'war_long',
     responsibilities: [],
   },
   {
     key: 'ar_base_overseer',
     customId: 'a:abo',
     label: 'AR Base Overseer',
-    category: 'warlord',
+    category: 'war_long',
     responsibilities: [],
   },
 ];

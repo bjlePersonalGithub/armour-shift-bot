@@ -15,12 +15,12 @@ function dutyBlock(duty: DutyDef, state: AdministratumState): string {
 }
 
 function categoryHeading(category: DutyCategory): string {
-  return category === 'weekly' ? '__**Weekly Roles:**__' : '__**Warlord Roles:**__';
+  return category === 'weekly' ? '__**Weekly Roles:**__' : '__**War Long Roles:**__';
 }
 
 function buildDescription(state: AdministratumState, includeFooter: boolean): string {
   const sections: string[] = [];
-  const categories: DutyCategory[] = ['weekly', 'warlord'];
+  const categories: DutyCategory[] = ['weekly', 'war_long'];
   for (const category of categories) {
     const duties = DUTIES.filter((d) => d.category === category);
     if (duties.length === 0) continue;

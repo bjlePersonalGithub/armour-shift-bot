@@ -137,7 +137,51 @@ describe('handleButton - duty claim/release', () => {
     expect(store.get('m1')?.tankmaster).toBe('u1');
   });
 
-  it('allows a single user to hold multiple distinct duties', async () => {
+  it('allows a single user to hold one weekly and one war long duty', async () => {
+    await handleButton({
+      data: { custom_id: 'a:tm' },
+      message: { id: 'm1' },
+      ...officer('u1'),
+    });
+    await handleButton({
+      data: { custom_id: 'a:ftl' },
+      message: { id: 'm1' },
+      ...officer('u1'),
+    });
+    expect(store.get('m1')?.tankmaster).toBe('u1');
+    expect(store.get('m1')?.facility_team_liason).toBe('u1');
+  });
+
+  it('rejects a second weekly duty when user already holds one', async () => {
+    store.set('m1', { ...fresh(), tankmaster: 'u1' });
+    const res = (await handleButton({
+      data: { custom_id: 'a:cs' },
+      message: { id: 'm1' },
+      ...officer('u1'),
+    })) as ResponseShape;
+    expect(res.data?.flags).toBe(InteractionResponseFlags.EPHEMERAL);
+    expect(res.data?.content).toMatch(/already hold a weekly duty/i);
+    expect(store.get('m1')?.company_scribe).toBeNull();
+    expect(store.get('m1')?.tankmaster).toBe('u1');
+  });
+
+  it('allows holding multiple war_long duties', async () => {
+    await handleButton({
+      data: { custom_id: 'a:ftl' },
+      message: { id: 'm1' },
+      ...officer('u1'),
+    });
+    await handleButton({
+      data: { custom_id: 'a:abo' },
+      message: { id: 'm1' },
+      ...officer('u1'),
+    });
+    expect(store.get('m1')?.facility_team_liason).toBe('u1');
+    expect(store.get('m1')?.ar_base_overseer).toBe('u1');
+  });
+
+  it('allows claiming a weekly duty after releasing the previous one', async () => {
+    store.set('m1', { ...fresh(), tankmaster: 'u1' });
     await handleButton({
       data: { custom_id: 'a:tm' },
       message: { id: 'm1' },
@@ -148,7 +192,7 @@ describe('handleButton - duty claim/release', () => {
       message: { id: 'm1' },
       ...officer('u1'),
     });
-    expect(store.get('m1')?.tankmaster).toBe('u1');
+    expect(store.get('m1')?.tankmaster).toBeNull();
     expect(store.get('m1')?.company_scribe).toBe('u1');
   });
 
