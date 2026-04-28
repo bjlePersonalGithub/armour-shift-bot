@@ -7,15 +7,15 @@ function mention(id: string | null): string {
 }
 
 function dutyBlock(duty: DutyDef, state: AdministratumState): string {
-  const lines = [`${duty.emote} **${duty.label}** = ${mention(state[duty.key])}`];
+  const lines = [`### ${duty.emote} ${duty.label} — ${mention(state[duty.key])}`];
   for (const r of duty.responsibilities) {
-    lines.push(`  • ${r}`);
+    lines.push(`- ${r}`);
   }
   return lines.join('\n');
 }
 
 function categoryHeading(category: DutyCategory): string {
-  return category === 'weekly' ? '__**Weekly Roles:**__' : '__**War Long Roles:**__';
+  return category === 'weekly' ? '## Weekly Roles' : '## War Long Roles';
 }
 
 function buildDescription(state: AdministratumState, includeFooter: boolean): string {

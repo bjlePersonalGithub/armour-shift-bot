@@ -14,6 +14,7 @@ services:
       AWS_ACCESS_KEY_ID: local
       AWS_SECRET_ACCESS_KEY: local
       AWS_DEFAULT_REGION: us-east-1
+      DYNAMO_TABLE: ${DYNAMO_TABLE:-shift-state}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
