@@ -14,6 +14,7 @@ services:
       AWS_ACCESS_KEY_ID: local
       AWS_SECRET_ACCESS_KEY: local
       AWS_DEFAULT_REGION: us-east-1
+      DYNAMO_TABLE: ${DYNAMO_TABLE:-shift-state}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
@@ -38,6 +39,8 @@ services:
         condition: service_completed_successfully
     ports:
       - "3000:3000"
+    volumes:
+      - ./src:/app/src
     environment:
       PORT: 3000
       DYNAMO_TABLE: ${DYNAMO_TABLE:-shift-state}
@@ -48,3 +51,6 @@ services:
       DISCORD_PUBLIC_KEY: ${DISCORD_PUBLIC_KEY}
       OFFICER_ROLE_ID: ${OFFICER_ROLE_ID:-}
       SHIFT_TIMEZONE: ${SHIFT_TIMEZONE:-America/New_York}
+      SHIFT_CHANNEL_ID: ${SHIFT_CHANNEL_ID:-}
+      FACILITY_TEAM_ROLE_ID: ${FACILITY_TEAM_ROLE_ID:-}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}

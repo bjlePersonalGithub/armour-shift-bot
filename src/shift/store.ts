@@ -4,6 +4,7 @@ import {
   GetCommand,
   PutCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { TABLE_NAME, DYNAMO_ENDPOINT } from '../config.js';
 
 export interface ShiftState {
   shift1_main: string | null;
@@ -15,15 +16,12 @@ export interface ShiftState {
   tank_squire: string | null;
   reserve: string[];
 }
-
-const TABLE_NAME = process.env['DYNAMO_TABLE'];
 if (!TABLE_NAME) {
   throw new Error('DYNAMO_TABLE env var is required');
 }
 
-const endpoint = process.env['DYNAMO_ENDPOINT'];
 const client = DynamoDBDocumentClient.from(
-  new DynamoDBClient(endpoint ? { endpoint } : {}),
+  new DynamoDBClient(DYNAMO_ENDPOINT ? { endpoint: DYNAMO_ENDPOINT } : {}),
 );
 
 export function emptyState(): ShiftState {

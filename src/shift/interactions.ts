@@ -6,7 +6,7 @@ import { emptyState, getState, setState } from './store.js';
 import type { ShiftState } from './store.js';
 import { buildComponents, buildEmbed, buildPlainText } from './ui.js';
 import { isSaturdayIn } from '../util/time.js';
-import { OFFICER_ROLE_ID } from '../config.js';
+import { OFFICER_ROLE_ID, SHIFT_CHANNEL_ID } from '../config.js';
 
 type SlotKey = Exclude<keyof ShiftState, 'reserve'>;
 
@@ -44,7 +44,12 @@ function rerender(state: ShiftState, asUpdate: boolean): Record<string, unknown>
   };
 }
 
-export function handleCommand(): Record<string, unknown> {
+export function handleCommand(channelId?: string): Record<string, unknown> {
+  if (channelId !== SHIFT_CHANNEL_ID) {
+    return ephemeral(
+      `This command can only be used in <#${SHIFT_CHANNEL_ID}>.`,
+    );
+  }
   if (isSaturdayIn()) {
     return ephemeral(
       'Shift sign-ups cannot be started on Saturday. Please run this command on a day before the upcoming Saturday.',
@@ -84,8 +89,19 @@ export async function handleButton(
 
   if (customId === 'r') {
     const idx = state.reserve.indexOf(userId);
-    if (idx >= 0) state.reserve.splice(idx, 1);
-    else state.reserve.push(userId);
+    if (idx >= 0) {
+      state.reserve.splice(idx, 1);
+    } else {
+      const heldSlot = (Object.values(SLOT_MAP) as SlotKey[]).find(
+        (k) => state[k] === userId,
+      );
+      if (heldSlot) {
+        return ephemeral(
+          'You are already signed up for a shift slot. Release it before joining reserves.',
+        );
+      }
+      state.reserve.push(userId);
+    }
     await setState(messageId, state);
     return rerender(state, true);
   }
@@ -105,6 +121,11 @@ export async function handleButton(
   } else if (current && current !== userId) {
     return ephemeral(`That slot is already held by <@${current}>. Ask them to release it first.`);
   } else {
+    if (state.reserve.includes(userId)) {
+      return ephemeral(
+        'You are in reserves. Leave reserves before signing up for a shift slot.',
+      );
+    }
     state[slot] = userId;
   }
   await setState(messageId, state);
