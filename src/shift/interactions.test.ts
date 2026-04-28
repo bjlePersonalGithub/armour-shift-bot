@@ -228,6 +228,83 @@ describe('handleButton - reserve toggle', () => {
   });
 });
 
+describe('handleButton - reserve/slot mutual exclusion', () => {
+  it('rejects reserve signup when user holds a main/secondary slot', async () => {
+    store.set('m1', { ...fresh(), shift1_main: 'u1' });
+    const res = (await handleButton({
+      data: { custom_id: 'r' },
+      message: { id: 'm1' },
+      ...officer('u1'),
+    })) as ResponseShape;
+    expect(res.data?.flags).toBe(InteractionResponseFlags.EPHEMERAL);
+    expect(res.data?.content).toMatch(/already signed up/i);
+    expect(store.get('m1')?.reserve).toEqual([]);
+    expect(store.get('m1')?.shift1_main).toBe('u1');
+  });
+
+  it('rejects reserve signup when user holds the tank squire slot', async () => {
+    store.set('m1', { ...fresh(), tank_squire: 'u1' });
+    const res = (await handleButton({
+      data: { custom_id: 'r' },
+      message: { id: 'm1' },
+      ...officer('u1'),
+    })) as ResponseShape;
+    expect(res.data?.flags).toBe(InteractionResponseFlags.EPHEMERAL);
+    expect(res.data?.content).toMatch(/already signed up/i);
+    expect(store.get('m1')?.reserve).toEqual([]);
+  });
+
+  it('rejects slot claim when user is already in reserves', async () => {
+    store.set('m1', { ...fresh(), reserve: ['u1'] });
+    const res = (await handleButton({
+      data: { custom_id: 's:1:m' },
+      message: { id: 'm1' },
+      ...officer('u1'),
+    })) as ResponseShape;
+    expect(res.data?.flags).toBe(InteractionResponseFlags.EPHEMERAL);
+    expect(res.data?.content).toMatch(/in reserves/i);
+    expect(store.get('m1')?.shift1_main).toBeNull();
+    expect(store.get('m1')?.reserve).toEqual(['u1']);
+  });
+
+  it('allows leaving reserves even while holding a slot (no-op guard)', async () => {
+    store.set('m1', { ...fresh(), shift1_main: 'u1', reserve: ['u1'] });
+    await handleButton({
+      data: { custom_id: 'r' },
+      message: { id: 'm1' },
+      ...officer('u1'),
+    });
+    expect(store.get('m1')?.reserve).toEqual([]);
+    expect(store.get('m1')?.shift1_main).toBe('u1');
+  });
+
+  it('allows releasing own slot even while in reserves (no-op guard)', async () => {
+    store.set('m1', { ...fresh(), shift1_main: 'u1', reserve: ['u1'] });
+    await handleButton({
+      data: { custom_id: 's:1:m' },
+      message: { id: 'm1' },
+      ...officer('u1'),
+    });
+    expect(store.get('m1')?.shift1_main).toBeNull();
+    expect(store.get('m1')?.reserve).toEqual(['u1']);
+  });
+
+  it('allows reserve signup after releasing held slot', async () => {
+    store.set('m1', { ...fresh(), shift1_main: 'u1' });
+    await handleButton({
+      data: { custom_id: 's:1:m' },
+      message: { id: 'm1' },
+      ...officer('u1'),
+    });
+    await handleButton({
+      data: { custom_id: 'r' },
+      message: { id: 'm1' },
+      ...officer('u1'),
+    });
+    expect(store.get('m1')?.reserve).toEqual(['u1']);
+  });
+});
+
 describe('handleButton - finalize and unknown', () => {
   it('finalize returns an ephemeral plaintext block', async () => {
     const res = (await handleButton({

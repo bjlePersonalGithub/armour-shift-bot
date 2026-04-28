@@ -89,8 +89,19 @@ export async function handleButton(
 
   if (customId === 'r') {
     const idx = state.reserve.indexOf(userId);
-    if (idx >= 0) state.reserve.splice(idx, 1);
-    else state.reserve.push(userId);
+    if (idx >= 0) {
+      state.reserve.splice(idx, 1);
+    } else {
+      const heldSlot = (Object.values(SLOT_MAP) as SlotKey[]).find(
+        (k) => state[k] === userId,
+      );
+      if (heldSlot) {
+        return ephemeral(
+          'You are already signed up for a shift slot. Release it before joining reserves.',
+        );
+      }
+      state.reserve.push(userId);
+    }
     await setState(messageId, state);
     return rerender(state, true);
   }
@@ -110,6 +121,11 @@ export async function handleButton(
   } else if (current && current !== userId) {
     return ephemeral(`That slot is already held by <@${current}>. Ask them to release it first.`);
   } else {
+    if (state.reserve.includes(userId)) {
+      return ephemeral(
+        'You are in reserves. Leave reserves before signing up for a shift slot.',
+      );
+    }
     state[slot] = userId;
   }
   await setState(messageId, state);

@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "tsx src/index.ts",
+    "dev": "docker compose up --build",
     "register": "tsx src/register.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
