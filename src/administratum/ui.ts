@@ -1,6 +1,7 @@
 import { DUTIES } from './duties.js';
 import type { DutyCategory, DutyDef } from './duties.js';
 import type { AdministratumState } from './store.js';
+import { currentWeekLabel } from '../util/time.js';
 
 function mention(id: string | null): string {
   return id ? `<@${id}>` : '_—_';
@@ -37,7 +38,7 @@ function buildDescription(state: AdministratumState, includeFooter: boolean): st
 
 export function buildEmbed(state: AdministratumState): Record<string, unknown> {
   return {
-    title: 'Weekly Duty Sign-Up',
+    title: `# Weekly Duty Sign-Up — Week of ${currentWeekLabel()}`,
     description: buildDescription(state, true),
     color: 0x2b2d31,
   };
