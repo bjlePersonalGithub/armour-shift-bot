@@ -98,5 +98,5 @@ export function currentWeekLabel(timeZone: string = SHIFT_TIMEZONE): string {
     timeZone: 'UTC',
     month: 'short',
     day: 'numeric',
-  }).format(date/);
+  }).format(date);
 }
