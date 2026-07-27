@@ -6,7 +6,7 @@ import { emptyState, getState, setState } from './store.js';
 import type { ShiftState } from './store.js';
 import { buildComponents, buildEmbed, buildPlainText } from './ui.js';
 import { isSaturdayIn } from '../util/time.js';
-import { OFFICER_ROLE_ID } from '../config.js';
+import { OFFICER_ROLE_ID, SHIFT_CHANNEL_ID } from '../config.js';
 
 type SlotKey = Exclude<keyof ShiftState, 'reserve'>;
 
@@ -44,7 +44,12 @@ function rerender(state: ShiftState, asUpdate: boolean): Record<string, unknown>
   };
 }
 
-export function handleCommand(): Record<string, unknown> {
+export function handleCommand(channelId?: string): Record<string, unknown> {
+  if (channelId !== SHIFT_CHANNEL_ID) {
+    return ephemeral(
+      `This command can only be used in <#${SHIFT_CHANNEL_ID}>.`,
+    );
+  }
   if (isSaturdayIn()) {
     return ephemeral(
       'Shift sign-ups cannot be started on Saturday. Please run this command on a day before the upcoming Saturday.',

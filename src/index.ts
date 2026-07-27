@@ -50,7 +50,7 @@ app.post(
 
       if (body.type === InteractionType.APPLICATION_COMMAND) {
         if (body.data?.name === 'shift') {
-          res.json(handleCommand());
+          res.json(handleCommand(body.channel_id));
           return;
         }
         console.warn('unknown command', { command: body.data?.name });
