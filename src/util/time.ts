@@ -78,3 +78,25 @@ export function unixTimestampNextSaturdayAt(
 export function discordTime(t: TimeOfDay): string {
   return `<t:${unixTimestampNextSaturdayAt(t, SHIFT_TIMEZONE)}:t>`;
 }
+
+function lastSundayYmd(timeZone: string): string {
+  const now = new Date();
+  const offset = weekdayIndexIn(timeZone, now);
+  const todayYmd = ymdIn(timeZone, now);
+  const todayUtc = Date.parse(`${todayYmd}T00:00:00Z`);
+  const target = new Date(todayUtc - offset * 86_400_000);
+  const y = target.getUTCFullYear();
+  const m = String(target.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(target.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function currentWeekLabel(timeZone: string = SHIFT_TIMEZONE): string {
+  const ymd = lastSundayYmd(timeZone);
+  const date = new Date(`${ymd}T12:00:00Z`);
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'UTC',
+    month: 'short',
+    day: 'numeric',
+  }).format(date);
+}

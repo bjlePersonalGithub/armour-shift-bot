@@ -6,7 +6,7 @@ Runs over **HTTP interactions** (no Gateway connection) using TypeScript + Expre
 
 ## Features
 
-- `/shift` command posts an embed with three shifts (Main + Secondary officer slots), a Tank Squire slot, and a Reserve list.
+- `/shift` command posts an embed with four shifts (Main + Secondary officer slots), a Tank Squire slot, and a Reserve list.
 - Click a slot to claim it. Click your own slot to unassign. Occupied slots can't be stolen.
 - Reserve is unlimited and can be held alongside a shift slot.
 - State is persisted to **DynamoDB**, keyed by Discord message ID — each `/shift` post is independent.
@@ -235,6 +235,55 @@ Changes go live within a few seconds of the wait returning.
 | `npm run register` | Registers/updates the `/shift` command with Discord |
 | `npm run deploy` | Builds the production container image, pushes it to ECR, and updates the Lambda function |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm test` | Runs the [vitest](https://vitest.dev) suite once and exits |
+| `npm run test:watch` | Runs vitest in watch mode — re-runs affected tests on file save |
+
+## Testing
+
+The suite uses [vitest](https://vitest.dev) with [supertest](https://github.com/ladjs/supertest) for HTTP assertions. It runs entirely in-process — no Discord, no AWS, no network — so it's safe to run on any branch without credentials.
+
+### Run
+
+```bash
+npm test           # single run, exits with non-zero on failure (use this in CI)
+npm run test:watch # watch mode for local development
+```
+
+Configuration lives in [vitest.config.ts](vitest.config.ts). Test files are picked up from `src/**/*.test.ts`.
+
+### What's covered
+
+- **[src/shift/interactions.test.ts](src/shift/interactions.test.ts)** — `handleCommand` and `handleButton`:
+  - `/shift` is blocked on Saturdays (the day shifts run) and returns the role-mention + embed + button row otherwise.
+  - Officer-role check rejects non-officers and unidentifiable users.
+  - Slot claim / release / conflict semantics for every `custom_id` (`s:1:m` … `s:4:s`, `ts`).
+  - Reserve toggle add/remove, including multiple distinct reserves on the same message.
+  - Reserve/slot mutual exclusion in both directions, covering shift 4.
+  - Finalize button returns the ephemeral plain-text block; unknown `custom_id`s are rejected.
+- **[src/shift/ui.test.ts](src/shift/ui.test.ts)** — `buildComponents`, `buildEmbed`, `buildPlainText`:
+  - The component payload stays within Discord's 5-action-row / 5-buttons-per-row limits, with no duplicate `custom_id`s.
+  - Every shift in `SHIFTS` has a Main and Secondary button, and the embed and plain-text output render a block for each.
+- **[src/index.test.ts](src/index.test.ts)** — the Express `/interactions` route:
+  - Missing or invalid signature → `401` (and `verifyKey` is not even called when headers are missing).
+  - `PING` → `PONG`.
+  - `APPLICATION_COMMAND` with name `shift` is dispatched to `handleCommand`; any other command name returns `Unknown command.`
+  - `MESSAGE_COMPONENT` is dispatched to `handleButton`.
+  - Unknown interaction types → `400`; handler exceptions → `500`.
+  - `GET /` health check returns `shift-bot ok`.
+
+### How the mocks work
+
+Tests run with no live infrastructure:
+
+- `./shift/store.js` is mocked with an in-memory `Map<messageId, ShiftState>`. This avoids the module's import-time `DYNAMO_TABLE` env-var check and means tests never instantiate a DynamoDB client.
+- `../util/time.js` is mocked so `isSaturdayIn` is deterministic and `discordTime` returns a stable string regardless of when the suite runs.
+- In the route tests, `discord-interactions`'s `verifyKey` is mocked so requests don't need real Ed25519 signatures, and `./shift/interactions.js` is replaced with stubs so the route layer is tested in isolation from business logic. `DISCORD_PUBLIC_KEY`, `DYNAMO_TABLE`, and `AWS_LAMBDA_FUNCTION_NAME` are set inside `vi.hoisted(...)` so they're populated before [src/index.ts](src/index.ts) is imported (which would otherwise throw and skip `app.listen` during tests).
+
+### Adding tests
+
+- Co-locate new tests next to the code under test as `*.test.ts` (the vitest glob picks them up automatically).
+- If a new module reads env at import time, set the value via `vi.hoisted(() => { process.env['X'] = '...'; ... })` before the dynamic `await import(...)`.
+- Prefer mocking at the module boundary (e.g. `vi.mock('./store.js', ...)`) over reaching into internals.
 
 ## Project layout
 
@@ -291,6 +340,8 @@ interface ShiftState {
   shift2_secondary: string | null;
   shift3_main: string | null;
   shift3_secondary: string | null;
+  shift4_main: string | null;
+  shift4_secondary: string | null;
   tank_squire: string | null;
   reserve: string[];               // unlimited user IDs
 }
@@ -305,12 +356,18 @@ Each `/shift` post has its own item, so you can run multiple concurrently (e.g. 
 | `s:1:m` / `s:1:s` | Shift 1 Main / Secondary |
 | `s:2:m` / `s:2:s` | Shift 2 Main / Secondary |
 | `s:3:m` / `s:3:s` | Shift 3 Main / Secondary |
+| `s:4:m` / `s:4:s` | Shift 4 Main / Secondary |
 | `ts` | Tank Squire |
 | `r` | Toggle Reserve |
+| `fin` | Finalize Sign-Up (ephemeral plain-text copy) |
 
 ## Customizing shifts
 
-Edit [src/config.ts](src/config.ts) to change labels or times. The button layout in [src/shift/ui.ts](src/shift/ui.ts) and slot keys in [src/shift/store.ts](src/shift/store.ts) assume exactly three shifts — adding or removing shifts requires updating both.
+Edit [src/config.ts](src/config.ts) to change labels or times. The button layout in [src/shift/ui.ts](src/shift/ui.ts), the `SLOT_MAP` in [src/shift/interactions.ts](src/shift/interactions.ts), and slot keys in [src/shift/store.ts](src/shift/store.ts) assume exactly four shifts — adding or removing shifts requires updating all three.
+
+> **Row budget:** Discord allows at most **5 action rows** per message, 5 buttons each. The panel uses one row per shift plus a shared row for Reserve / Tank Squire / Finalize — all 5 rows are spoken for. A fifth shift would need the layout condensed first (e.g. two shifts per row with shortened labels). `src/shift/ui.test.ts` guards this limit.
+
+Adding a shift also adds fields to `ShiftState`. `getState` spreads stored items over `emptyState()`, so `/shift` posts made before the new fields existed keep working and render the new slots as empty.
 
 ## Troubleshooting
 

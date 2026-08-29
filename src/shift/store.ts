@@ -4,6 +4,7 @@ import {
   GetCommand,
   PutCommand,
 } from '@aws-sdk/lib-dynamodb';
+import { TABLE_NAME, DYNAMO_ENDPOINT } from '../config.js';
 
 export interface ShiftState {
   shift1_main: string | null;
@@ -12,18 +13,17 @@ export interface ShiftState {
   shift2_secondary: string | null;
   shift3_main: string | null;
   shift3_secondary: string | null;
+  shift4_main: string | null;
+  shift4_secondary: string | null;
   tank_squire: string | null;
   reserve: string[];
 }
-
-const TABLE_NAME = process.env['DYNAMO_TABLE'];
 if (!TABLE_NAME) {
   throw new Error('DYNAMO_TABLE env var is required');
 }
 
-const endpoint = process.env['DYNAMO_ENDPOINT'];
 const client = DynamoDBDocumentClient.from(
-  new DynamoDBClient(endpoint ? { endpoint } : {}),
+  new DynamoDBClient(DYNAMO_ENDPOINT ? { endpoint: DYNAMO_ENDPOINT } : {}),
 );
 
 export function emptyState(): ShiftState {
@@ -34,6 +34,8 @@ export function emptyState(): ShiftState {
     shift2_secondary: null,
     shift3_main: null,
     shift3_secondary: null,
+    shift4_main: null,
+    shift4_secondary: null,
     tank_squire: null,
     reserve: [],
   };
@@ -46,7 +48,10 @@ export async function getState(messageId: string): Promise<ShiftState> {
       Key: { messageId },
     }),
   );
-  return (res.Item?.['state'] as ShiftState | undefined) ?? emptyState();
+  // Spread over a fresh state so items written before a slot existed come back
+  // with that slot as null rather than undefined.
+  const stored = res.Item?.['state'] as Partial<ShiftState> | undefined;
+  return { ...emptyState(), ...stored };
 }
 
 export async function setState(

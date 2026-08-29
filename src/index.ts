@@ -5,12 +5,20 @@ import {
   InteractionType,
   verifyKey,
 } from 'discord-interactions';
-import { handleButton, handleCommand } from './shift/interactions.js';
+import {
+  handleButton as handleShiftButton,
+  handleCommand as handleShiftCommand,
+} from './shift/interactions.js';
+import {
+  handleButton as handleAdministratumButton,
+  handleCommand as handleAdministratumCommand,
+} from './administratum/interactions.js';
+import { DISCORD_PUBLIC_KEY, AWS_LAMBDA_FUNCTION_NAME, PORT } from './config.js';
 
-const PUBLIC_KEY = process.env['DISCORD_PUBLIC_KEY'];
-if (!PUBLIC_KEY) {
+if (!DISCORD_PUBLIC_KEY) {
   throw new Error('DISCORD_PUBLIC_KEY is required');
 }
+const PUBLIC_KEY: string = DISCORD_PUBLIC_KEY;
 
 export const app = express();
 
@@ -50,7 +58,11 @@ app.post(
 
       if (body.type === InteractionType.APPLICATION_COMMAND) {
         if (body.data?.name === 'shift') {
-          res.json(handleCommand());
+          res.json(handleShiftCommand(body.channel_id));
+          return;
+        }
+        if (body.data?.name === 'administratum') {
+          res.json(await handleAdministratumCommand(body.guild_id));
           return;
         }
         console.warn('unknown command', { command: body.data?.name });
@@ -62,7 +74,12 @@ app.post(
       }
 
       if (body.type === InteractionType.MESSAGE_COMPONENT) {
-        res.json(await handleButton(body));
+        const customId: string | undefined = body.data?.custom_id;
+        if (customId?.startsWith('a:')) {
+          res.json(await handleAdministratumButton(body));
+          return;
+        }
+        res.json(await handleShiftButton(body));
         return;
       }
 
@@ -79,8 +96,7 @@ app.get('/', (_req, res) => {
   res.send('shift-bot ok');
 });
 
-if (!process.env['AWS_LAMBDA_FUNCTION_NAME']) {
-  const PORT = Number(process.env['PORT']) || 3000;
+if (!AWS_LAMBDA_FUNCTION_NAME) {
   app.listen(PORT, () => {
     console.log(`listening on :${PORT}`);
   });

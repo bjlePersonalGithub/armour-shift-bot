@@ -55,7 +55,8 @@ export function buildPlainText(state: ShiftState): string {
     '# **:Armoured:  THE OFFICERS IN CHARGE OF TANK LINE**',
     buildDescription(state, false),
     '',
-    '_Please indicate your attendance with the presented numbers 1\uFE0F\u20E3 2\uFE0F\u20E3 3\uFE0F\u20E3_',
+    '_Please indicate your attendance with the presented numbers 1\uFE0F\u20E3 2\uFE0F\u20E3 3\uFE0F\u20E3 4\uFE0F\u20E3_',
+    'If you are interested in Tank Maiding please react with :machine_spirit:',
   ].join('\n');
 }
 
@@ -80,7 +81,13 @@ export function buildComponents(): Component[] {
     row([btn('s:1:m', 'Shift 1 Main'), btn('s:1:s', 'Shift 1 Secondary')]),
     row([btn('s:2:m', 'Shift 2 Main'), btn('s:2:s', 'Shift 2 Secondary')]),
     row([btn('s:3:m', 'Shift 3 Main'), btn('s:3:s', 'Shift 3 Secondary')]),
-    row([btn('r', 'Toggle Reserve', 2), btn('ts', 'Tank Squire', 3)]),
-    row([btn('fin', 'Finalize Sign-Up', 2)]),
+    row([btn('s:4:m', 'Shift 4 Main'), btn('s:4:s', 'Shift 4 Secondary')]),
+    // Discord allows 5 action rows per message; the utility buttons share the
+    // last one so each shift keeps a row of its own.
+    row([
+      btn('r', 'Toggle Reserve', 2),
+      btn('ts', 'Tank Squire', 3),
+      btn('fin', 'Finalize Sign-Up', 2),
+    ]),
   ];
 }
